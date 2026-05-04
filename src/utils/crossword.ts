@@ -103,6 +103,19 @@ export function generateCrossword(
     if (bestPlacements.length === adjectives.length) break;
   }
 
-  // No longer filling with dummy characters for a clean crossword look
+  // Fill remaining black squares with random characters from the adjective pool
+  const allKana = adjectives.map(a => a.kana).join('').split('');
+  const uniqueKana = Array.from(new Set(allKana));
+  
+  for (let y = 0; y < gridSize; y++) {
+    for (let x = 0; x < gridSize; x++) {
+      if (bestGrid[y][x].isBlack) {
+        const randomChar = uniqueKana[Math.floor(Math.random() * uniqueKana.length)] || 'あ';
+        bestGrid[y][x].char = randomChar;
+        // Keep isBlack as true to distinguish for styling, but we'll show the character
+      }
+    }
+  }
+
   return { grid: bestGrid, placements: bestPlacements };
 }

@@ -46,6 +46,7 @@ export default function App() {
   const [showSuccess, setShowSuccess] = useState<string | null>(null);
   const [score, setScore] = useState(0);
   const [isGameClear, setIsGameClear] = useState(false);
+  const [solvedWordIds, setSolvedWordIds] = useState<string[]>([]);
 
   // Available lessons from data
   const availableLessons = useMemo(() => {
@@ -120,6 +121,7 @@ export default function App() {
     setUserInput("");
     setScore(0);
     setIsGameClear(false);
+    setSolvedWordIds([]);
   }, [filteredAdjectives, wordCount]);
 
   useEffect(() => {
@@ -163,6 +165,11 @@ export default function App() {
           wordIds.includes(p.id) ? { ...p, answered: true } : p
         );
         return { ...prev, placements: newPlacements };
+      });
+
+      setSolvedWordIds(prev => {
+        const uniqueWordIds = wordIds.filter(id => !prev.includes(id));
+        return [...prev, ...uniqueWordIds];
       });
 
       setScore(s => s + (100 * allMatchingWithSameReading.length));
@@ -332,10 +339,10 @@ export default function App() {
       </motion.div>
 
       {/* Main Content Area - Center Game Area */}
-      <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-hidden relative">
-        <div className="bg-black/20 p-4 sm:p-8 rounded-[48px] shadow-2xl border border-white/5 backdrop-blur-md flex items-center justify-center">
+      <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-auto relative custom-scrollbar">
+        <div className="bg-black/20 p-4 sm:p-6 rounded-[48px] shadow-2xl border border-white/5 backdrop-blur-md flex items-center justify-center min-w-fit min-h-fit mx-auto">
             <div 
-              className="grid gap-1.5 sm:gap-2" 
+              className="grid gap-1 sm:gap-1.5" 
               style={{ 
                 gridTemplateColumns: `repeat(${gameData?.grid[0]?.length || 0}, minmax(0, 1fr))`,
               }}
@@ -344,30 +351,32 @@ export default function App() {
                 row.map((cell, x) => (
                     <div
                       key={`${x}-${y}`}
-                      onClick={() => !cell.isBlack && handleCellClick(cell.char)}
+                      onClick={() => handleCellClick(cell.char)}
                       className={`
-                        w-[7vmin] h-[7vmin] sm:w-[8vmin] sm:h-[8vmin] max-w-[65px] max-h-[65px] flex items-center justify-center cursor-pointer select-none
-                        ${cell.isBlack ? 'bg-transparent' : 'tile-cell'}
+                        ${wordCount <= 8 ? 'w-[8vmin] h-[8vmin] sm:w-[8.5vmin] sm:h-[8.5vmin]' : 
+                          wordCount <= 15 ? 'w-[7vmin] h-[7vmin] sm:w-[7.5vmin] sm:h-[7.5vmin]' : 
+                          'w-[5.5vmin] h-[5.5vmin] sm:w-[6.2vmin] sm:h-[6.2vmin]'} 
+                        max-w-[65px] max-h-[65px] flex items-center justify-center cursor-pointer select-none
+                        tile-cell
                         ${!cell.isBlack && isCellBlue(cell) ? 'correct-complete shadow-lg' : ''}
+                        ${cell.isBlack ? 'opacity-90' : ''}
                         active:scale-95 transition-all
                       `}
                     >
-                      {!cell.isBlack && (
-                        <span 
-                          className={`kana-text font-black transition-all flex items-center justify-center leading-none ${isCellBlue(cell) ? 'scale-110' : 'text-gray-800'}`}
-                          style={{
-                            fontSize: wordCount <= 8 ? '4.5vmin' : wordCount <= 13 ? '3.5vmin' : '2.8vmin',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            height: '100%',
-                            width: '100%',
-                            marginTop: '-0.1em' // Subtle visual adjustment for vertical centering in some fonts
-                          }}
-                        >
-                          {cell.char}
-                        </span>
-                      )}
+                      <span 
+                        className={`kana-text font-black transition-all flex items-center justify-center leading-none ${(!cell.isBlack && isCellBlue(cell)) ? 'scale-110' : 'text-gray-800'}`}
+                        style={{
+                          fontSize: wordCount <= 8 ? '4.5vmin' : wordCount <= 13 ? '3.5vmin' : '2.8vmin',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '100%',
+                          width: '100%',
+                          marginTop: '-0.1em'
+                        }}
+                      >
+                        {cell.char}
+                      </span>
                     </div>
                 ))
               ))}
@@ -416,7 +425,7 @@ export default function App() {
             <p className="text-[9px] uppercase tracking-widest text-white/40 font-bold mb-3 text-center">SOLVED_WORDS</p>
             <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-2">
               <AnimatePresence>
-                {gameData && Array.from(new Set(gameData.placements.filter(p => p.answered).map(p => p.id))).map((id) => {
+                {gameData && solvedWordIds.map((id, index) => {
                    const p = gameData.placements.find(item => item.id === id);
                    if (!p) return null;
                    return (
@@ -427,12 +436,14 @@ export default function App() {
                       className="bg-black/30 border border-white/10 p-2 rounded-xl flex flex-col"
                     >
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-xs font-black text-casino-gold">{p.adjective.kana}</span>
+                        <span className="text-xs font-black text-casino-gold">
+                          {index + 1}. {p.adjective.kana}
+                        </span>
                         <span className="text-[10px] text-white/80 font-bold">
                           {language === 'es' ? p.adjective.spanish : p.adjective.english}
                         </span>
                       </div>
-                      <span className="text-[8px] text-white/30 uppercase font-black tracking-tighter">{p.adjective.romaji}</span>
+                      <span className="text-[8px] text-white/30 uppercase font-black tracking-tighter ml-4">{p.adjective.romaji}</span>
                     </motion.div>
                    );
                 })}
