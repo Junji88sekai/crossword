@@ -45,53 +45,52 @@ export function generateCrossword(
     // Shuffle remaining pool to avoid deterministic failures
     const shuffledPool = [...pool].sort(() => Math.random() - 0.5);
 
-    // Try to connect other words
-    for (const word of shuffledPool) {
+    // Try to place words without overlapping and without requiring intersections
+    // This addresses the issue where overlapping words could be confusing or cause words to be skipped
+    for (const word of pool) {
       let placed = false;
-      const shuffledPlacements = [...tempPlacements].sort(() => Math.random() - 0.5);
-      for (const p of shuffledPlacements) {
+      
+      // Try many random positions for each word to find a fit
+      for (let retry = 0; retry < 500; retry++) {
         if (placed) break;
-        for (let i = 0; i < p.adjective.kana.length; i++) {
-          if (placed) break;
-          for (let j = 0; j < word.kana.length; j++) {
-            if (word.kana[j] === p.adjective.kana[i]) {
-              const dir = p.direction === 'horizontal' ? 'vertical' : 'horizontal';
-              const sx = p.direction === 'horizontal' ? p.position.x + i : p.position.x - j;
-              const sy = p.direction === 'horizontal' ? p.position.y - j : p.position.y + i;
+        
+        const dir = Math.random() > 0.5 ? 'horizontal' : 'vertical';
+        const sx = Math.floor(Math.random() * (gridSize - (dir === 'horizontal' ? word.kana.length : 0)));
+        const sy = Math.floor(Math.random() * (gridSize - (dir === 'vertical' ? word.kana.length : 0)));
 
-              // Bounds check
-              if (sx >= 0 && sy >= 0 && sx + (dir === 'horizontal' ? word.kana.length : 0) <= gridSize && sy + (dir === 'vertical' ? word.kana.length : 0) <= gridSize) {
-                let fits = true;
-                // Collision check
-                for (let k = 0; k < word.kana.length; k++) {
-                  const cx = dir === 'horizontal' ? sx + k : sx;
-                  const cy = dir === 'horizontal' ? sy : sy + k;
-                  const c = tempGrid[cy][cx];
-                  if (!c.isBlack && c.char !== word.kana[k]) { fits = false; break; }
-                  
-                  // Proximity check (don't place words right next to each other if not intersecting)
-                  // Simplified: check neighbors only if not the current word
-                  const neighbors = [
-                    {dx: -1, dy: 0}, {dx: 1, dy: 0}, {dx: 0, dy: -1}, {dx: 0, dy: 1}
-                  ];
-                  for (const n of neighbors) {
-                    const nx = cx + n.dx;
-                    const ny = cy + n.dy;
-                    if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) {
-                      const nc = tempGrid[ny][nx];
-                      if (!nc.isBlack) {
-                        // If it's not an intersection point, it shouldn't be adjacent
-                        const isIntersection = (cx === (dir === 'horizontal' ? sx + k : sx) && cy === (dir === 'horizontal' ? sy : sy + k) && nc.char === word.kana[k]);
-                        // This proximity check is complex, let's just allow dense packing for now
-                        // since it's a crossword "mashup" rather than a strict grid.
-                      }
-                    }
-                  }
-                }
-                if (fits) { attemptPlace(word, sx, sy, dir); placed = true; break; }
+        let fits = true;
+        // Collision check - ensure space is blank AND has a small buffer (optional but good for clarity)
+        for (let k = 0; k < word.kana.length; k++) {
+          const cx = dir === 'horizontal' ? sx + k : sx;
+          const cy = dir === 'horizontal' ? sy : sy + k;
+          
+          if (!tempGrid[cy][cx].isBlack) {
+            fits = false;
+            break;
+          }
+          
+          // Check neighbors to avoid words touching side-by-side (adds buffer)
+          const neighbors = [
+            {dx: -1, dy: 0}, {dx: 1, dy: 0}, {dx: 0, dy: -1}, {dx: 0, dy: 1},
+            {dx: -1, dy: -1}, {dx: 1, dy: 1}, {dx: -1, dy: 1}, {dx: 1, dy: -1}
+          ];
+          for (const n of neighbors) {
+            const nx = cx + n.dx;
+            const ny = cy + n.dy;
+            if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) {
+              if (!tempGrid[ny][nx].isBlack) {
+                // If the neighbor is already occupied, we don't fit (ensures separation)
+                fits = false;
+                break;
               }
             }
           }
+          if (!fits) break;
+        }
+
+        if (fits) {
+          attemptPlace(word, sx, sy, dir);
+          placed = true;
         }
       }
     }

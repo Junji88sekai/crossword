@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Target, Trophy, RotateCcw, ChevronLeft, ChevronRight, Play } from 'lucide-react';
+import { Target, Trophy, RotateCcw, ChevronLeft, ChevronRight, Play, Lightbulb } from 'lucide-react';
 import { Adjective, Level, CellData, WordPlacement } from './types';
 import { ADJECTIVES } from './data/adjectives';
 import { generateCrossword } from './utils/crossword';
@@ -47,6 +47,7 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [isGameClear, setIsGameClear] = useState(false);
   const [solvedWordIds, setSolvedWordIds] = useState<string[]>([]);
+  const [hintingWordId, setHintingWordId] = useState<string | null>(null);
 
   // Available lessons from data
   const availableLessons = useMemo(() => {
@@ -115,13 +116,14 @@ export default function App() {
       .slice(0, wordCount);
     
     // Adjust grid size based on word count
-    const gridSize = wordCount <= 8 ? 8 : wordCount <= 13 ? 10 : wordCount <= 18 ? 11 : 12;
+    const gridSize = wordCount <= 8 ? 8 : wordCount <= 13 ? 10 : wordCount <= 18 ? 12 : 14;
     const result = generateCrossword(randomAdjectives, gridSize);
     setGameData(result);
     setUserInput("");
     setScore(0);
     setIsGameClear(false);
     setSolvedWordIds([]);
+    setHintingWordId(null);
   }, [filteredAdjectives, wordCount]);
 
   useEffect(() => {
@@ -232,6 +234,27 @@ export default function App() {
       const placement = gameData.placements.find(p => p.id === id);
       return placement?.answered === true;
     });
+  };
+
+  const isCellHinting = (cell: CellData) => {
+    if (!hintingWordId || cell.wordIds.length === 0) return false;
+    return cell.wordIds.includes(hintingWordId);
+  };
+
+  const giveHint = () => {
+    if (!gameData || hintingWordId) return;
+    
+    const unsolved = gameData.placements.filter(p => !p.answered);
+    if (unsolved.length === 0) return;
+    
+    const randomWord = unsolved[Math.floor(Math.random() * unsolved.length)];
+    setHintingWordId(randomWord.id);
+    
+    playInputSound();
+    
+    setTimeout(() => {
+      setHintingWordId(null);
+    }, 2000);
   };
 
   return (
@@ -359,12 +382,13 @@ export default function App() {
                         max-w-[65px] max-h-[65px] flex items-center justify-center cursor-pointer select-none
                         tile-cell
                         ${!cell.isBlack && isCellBlue(cell) ? 'correct-complete shadow-lg' : ''}
-                        ${cell.isBlack ? 'opacity-90' : ''}
+                        ${isCellHinting(cell) ? 'ring-4 ring-pink-500 shadow-[0_0_40px_rgba(236,72,153,1)] bg-pink-400/50 animate-pulse z-20 scale-125' : ''}
+                        ${cell.isBlack && !isCellHinting(cell) ? 'opacity-90' : ''}
                         active:scale-95 transition-all
                       `}
                     >
                       <span 
-                        className={`kana-text font-black transition-all flex items-center justify-center leading-none ${(!cell.isBlack && isCellBlue(cell)) ? 'scale-110' : 'text-gray-800'}`}
+                        className={`kana-text font-black transition-all flex items-center justify-center leading-none ${(!cell.isBlack && (isCellBlue(cell) || isCellHinting(cell))) ? 'scale-110' : 'text-gray-800'} ${isCellHinting(cell) ? 'text-pink-800 drop-shadow-[0_0_8px_rgba(255,255,255,1)]' : ''}`}
                         style={{
                           fontSize: wordCount <= 8 ? '4.5vmin' : wordCount <= 13 ? '3.5vmin' : '2.8vmin',
                           display: 'flex',
@@ -381,6 +405,32 @@ export default function App() {
                 ))
               ))}
             </div>
+          </div>
+
+          {/* Hint Button Overlay */}
+          <div className="absolute bottom-8 right-8 flex flex-col items-end gap-2">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={giveHint}
+              disabled={hintingWordId !== null || isGameClear}
+              className={`
+                group relative p-4 rounded-full shadow-2xl flex items-center justify-center transition-all overflow-hidden
+                ${hintingWordId || isGameClear 
+                  ? 'bg-white/5 text-white/20 cursor-not-allowed border border-white/5' 
+                  : 'bg-casino-gold text-casino-blue border-2 border-white/20 hover:shadow-[0_0_20px_rgba(255,215,0,0.4)]'
+                }
+              `}
+            >
+              <Lightbulb className={hintingWordId ? "animate-pulse" : ""} />
+              {!hintingWordId && !isGameClear && (
+                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                </span>
+              )}
+            </motion.button>
+            <p className="text-[10px] font-black text-white/30 uppercase tracking-widest bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">Hint</p>
           </div>
         </div>
 
@@ -423,30 +473,31 @@ export default function App() {
           {/* Answered Adjectives List */}
           <div className="w-full flex-1 flex flex-col overflow-hidden">
             <p className="text-[9px] uppercase tracking-widest text-white/40 font-bold mb-3 text-center">SOLVED_WORDS</p>
-            <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-2">
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
               <AnimatePresence>
-                {gameData && solvedWordIds.map((id, index) => {
-                   const p = gameData.placements.find(item => item.id === id);
-                   if (!p) return null;
-                   return (
-                    <motion.div
-                      key={id}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className="bg-black/30 border border-white/10 p-2 rounded-xl flex flex-col"
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-xs font-black text-casino-gold">
-                          {index + 1}. {p.adjective.kana}
-                        </span>
-                        <span className="text-[10px] text-white/80 font-bold">
-                          {language === 'es' ? p.adjective.spanish : p.adjective.english}
-                        </span>
-                      </div>
-                      <span className="text-[8px] text-white/30 uppercase font-black tracking-tighter ml-4">{p.adjective.romaji}</span>
-                    </motion.div>
-                   );
-                })}
+                <div className="grid grid-cols-2 gap-1.5 p-1">
+                  {gameData && solvedWordIds.map((id, index) => {
+                     const p = gameData.placements.find(item => item.id === id);
+                     if (!p) return null;
+                     return (
+                      <motion.div
+                        key={id}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-black/30 border border-white/10 p-1.5 rounded-lg flex flex-col min-w-0"
+                      >
+                        <div className="flex flex-col gap-0 overflow-hidden text-[9px] leading-tight">
+                          <span className="font-black text-casino-gold truncate">
+                            {index + 1}. {p.adjective.kana}
+                          </span>
+                          <span className="text-white/80 font-bold truncate">
+                            {language === 'es' ? p.adjective.spanish : p.adjective.english}
+                          </span>
+                        </div>
+                      </motion.div>
+                     );
+                  })}
+                </div>
               </AnimatePresence>
             </div>
           </div>
@@ -465,8 +516,8 @@ export default function App() {
             exit={{ scale: 2, opacity: 0 }}
             className="fixed inset-0 flex items-center justify-center pointer-events-none z-50 text-center px-4"
           >
-            <div className="bg-casino-gold text-casino-blue px-12 py-8 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] border-4 border-white max-w-2xl">
-              <p className="text-5xl font-display font-bold italic tracking-tighter uppercase leading-tight">
+            <div className="bg-casino-gold text-casino-blue px-8 py-6 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] border-4 border-white max-w-lg">
+              <p className="text-3xl font-display font-bold italic tracking-tighter uppercase leading-tight">
                 {showSuccess}
               </p>
             </div>
